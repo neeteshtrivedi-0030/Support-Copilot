@@ -1,0 +1,1499 @@
+openapi: "3.0.3"
+info:
+  version: 1.0.0
+  title: Enterprise AI Knowledge & Support Copilot API
+  description: >
+    Production-grade API for Enterprise AI Knowledge & Support Copilot.
+    Provides multi-tenant document RAG, AI agent orchestration, intelligent analytics,
+    and role-based access control.
+servers:
+  - url: http://localhost:5000/api/v1
+    description: Local Development Server
+  - url: https://api.supportcopilot.com/api/v1
+    description: Production Server
+
+tags:
+  - name: Authentication
+    description: User authentication, registration, token refresh, and session management
+  - name: Documents
+    description: Knowledge document management, MinIO S3 object storage upload, and department access control
+  - name: Chat & Retrieval
+    description: Multi-turn conversational RAG, question answering, citations, and semantic chunk search
+  - name: Conversations
+    description: User conversation threads, message histories, and cascade deletion
+  - name: Admin
+    description: Administrative management for users, documents, and overall system & RAG evaluation analytics
+  - name: System
+    description: System status and health probes
+
+paths:
+  /auth/register:
+    post:
+      summary: Register a new employee/user
+      description: Creates a new user profile, hashes password, saves session, and issues initial JWT access & refresh tokens.
+      operationId: register
+      tags:
+        - Authentication
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              name: "Neetesh Trivedi"
+              email: "neetesh@company.com"
+              password: "Password123!"
+              department: "Engineering"
+              role: "admin"
+      responses:
+        200:
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AuthData'
+        400:
+          $ref: '#/components/responses/BadRequestError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/login:
+    post:
+      summary: Authenticate user & return JWT tokens
+      description: Authenticates user credentials, evaluates active status in a single query, issues JWT token pair, and records last login.
+      operationId: login
+      tags:
+        - Authentication
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: "neetesh@company.com"
+              password: "Password123!"
+              deviceToken: ""
+      responses:
+        200:
+          description: Logged in successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AuthData'
+        400:
+          $ref: '#/components/responses/BadRequestError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/refresh:
+    post:
+      summary: Refresh JWT access token using refresh token
+      description: >
+        Protected with Refresh Token supplied in request headers (x-refresh-token).
+        Rotates session token and issues fresh JWT access and refresh token pair.
+        If refresh token is expired, returns 401 prompt asking the user to log in again with credentials.
+      operationId: refreshToken
+      tags:
+        - Authentication
+      security:
+        - RefreshTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+      responses:
+        200:
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TokenRefreshData'
+              example:
+                success: true
+                statusCode: 200
+                message: "Token refreshed successfully."
+                data:
+                  tokens:
+                    accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    refreshToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        400:
+          $ref: '#/components/responses/BadRequestError'
+        401:
+          description: Refresh token missing, expired, or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                success: false
+                statusCode: 401
+                message: "Your session has expired. Please log in again with your credentials."
+                data: null
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/logout:
+    post:
+      summary: Logout user session
+      description: >
+        Protected endpoint: requires valid access token directly in x-access-token header.
+        Revokes user refresh token session in database. Accepts tokens via headers, not body.
+      operationId: logout
+      tags:
+        - Authentication
+      security:
+        - AccessTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+      responses:
+        200:
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        nullable: true
+                        example: null
+              example:
+                success: true
+                statusCode: 200
+                message: "Logged out successfully."
+                data: null
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /health:
+    get:
+      summary: System health check
+      description: Checks connectivity to MongoDB, Redis, and overall node runtime health.
+      operationId: getHealth
+      tags:
+        - System
+      responses:
+        200:
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+
+  /documents/upload:
+    post:
+      summary: Upload knowledge document (Admin only)
+      description: Validates file format (PDF, DOCX, TXT), checks SHA-256 hash deduplication, stores file in MinIO S3 bucket, and registers document metadata in MongoDB with PENDING status.
+      operationId: uploadDocument
+      tags:
+        - Documents
+      security:
+        - AccessTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - department
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Document file (.pdf, .docx, or .txt, max 50MB)
+                name:
+                  type: string
+                  description: Optional display title of document
+                  example: "Engineering Remote Work Policy"
+                department:
+                  type: string
+                  enum: [HR, IT, Finance, Security, Engineering, General]
+                  example: "Engineering"
+                accessLevel:
+                  type: string
+                  enum: [public, department_only, admin_only]
+                  default: department_only
+                  example: "department_only"
+      responses:
+        200:
+          description: Document uploaded successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DocumentUploadData'
+        400:
+          $ref: '#/components/responses/BadRequestError'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /documents:
+    get:
+      summary: List knowledge documents
+      description: Returns paginated list of documents. Non-admin users are automatically restricted to PUBLIC documents or documents matching their own department.
+      operationId: listDocuments
+      tags:
+        - Documents
+      security:
+        - AccessTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: department
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [HR, IT, Finance, Security, Engineering, General]
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, processing, processed, failed]
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pdf, docx, txt]
+        - name: accessLevel
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [public, department_only, admin_only]
+      responses:
+        200:
+          description: Documents retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DocumentListData'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /documents/{id}:
+    get:
+      summary: Get document details by ID
+      description: Retrieves complete document metadata, chunk count, and download URL. Enforces department access control for non-admin users.
+      operationId: getDocumentById
+      tags:
+        - Documents
+      security:
+        - AccessTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+        - name: id
+          in: path
+          required: true
+          description: MongoDB ObjectId of document
+          schema:
+            type: string
+      responses:
+        200:
+          description: Document retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DocumentDetailData'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      summary: Delete document (Admin only)
+      description: Deletes document object from MinIO S3 bucket and permanently purges document record and indexed chunks from MongoDB.
+      operationId: deleteDocument
+      tags:
+        - Documents
+      security:
+        - AccessTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+        - name: id
+          in: path
+          required: true
+          description: MongoDB ObjectId of document
+          schema:
+            type: string
+      responses:
+        200:
+          description: Document deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /documents/{id}/download:
+    get:
+      summary: Download original document file
+      description: Generates a presigned URL and redirects client to securely stream original document from MinIO S3 storage.
+      operationId: downloadDocument
+      tags:
+        - Documents
+      security:
+        - AccessTokenAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: MongoDB ObjectId of document
+          schema:
+            type: string
+      responses:
+        302:
+          description: Redirect to presigned MinIO S3 download URL
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /documents/{id}/retry:
+    post:
+      summary: Retry failed document processing (Admin only)
+      description: Resets document processing status to PENDING for re-ingestion and vector indexing.
+      operationId: retryDocumentProcessing
+      tags:
+        - Documents
+      security:
+        - AccessTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+        - name: id
+          in: path
+          required: true
+          description: MongoDB ObjectId of document
+          schema:
+            type: string
+      responses:
+        200:
+          description: Retry initiated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DocumentDetailData'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /chat:
+    post:
+      summary: Conversational RAG question answering
+      description: Submit a natural language question. Performs multi-turn query rewriting, department-level secure vector retrieval, and ground-truth LLM answer generation with source citations.
+      operationId: sendChatMessage
+      tags:
+        - Chat & Retrieval
+      security:
+        - AccessTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  type: string
+                  example: "What is our work-from-home policy?"
+                conversationId:
+                  type: string
+                  nullable: true
+                  example: "67041a7d8892f3b39c001234"
+                department:
+                  type: string
+                  example: "HR"
+                stream:
+                  type: boolean
+                  default: false
+      responses:
+        200:
+          description: Answer generated with source citations
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          conversationId:
+                            type: string
+                          messageId:
+                            type: string
+                          answer:
+                            type: string
+                          sources:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                documentId:
+                                  type: string
+                                chunkId:
+                                  type: string
+                                documentName:
+                                  type: string
+                                pageNumber:
+                                  type: integer
+                                section:
+                                  type: string
+                                snippet:
+                                  type: string
+                                similarityScore:
+                                  type: number
+                          tokens:
+                            type: object
+                            properties:
+                              promptTokens:
+                                type: integer
+                              completionTokens:
+                                type: integer
+                              totalTokens:
+                                type: integer
+                          responseTimeMs:
+                            type: integer
+        400:
+          $ref: '#/components/responses/BadRequestError'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /search:
+    post:
+      summary: Semantic document & chunk search
+      description: Search knowledge document chunks with semantic relevance, similarity scoring, and strict department access enforcement.
+      operationId: searchKnowledgeBase
+      tags:
+        - Chat & Retrieval
+      security:
+        - AccessTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  example: "laptop replacement policy"
+                department:
+                  type: string
+                  example: "IT"
+                limit:
+                  type: integer
+                  default: 5
+                minScore:
+                  type: number
+                  default: 0.25
+      responses:
+        200:
+          description: Search results retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          query:
+                            type: string
+                          total:
+                            type: integer
+                          results:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                documentId:
+                                  type: string
+                                chunkId:
+                                  type: string
+                                documentName:
+                                  type: string
+                                pageNumber:
+                                  type: integer
+                                section:
+                                  type: string
+                                content:
+                                  type: string
+                                department:
+                                  type: string
+                                similarityScore:
+                                  type: number
+        400:
+          $ref: '#/components/responses/BadRequestError'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /conversations:
+    get:
+      summary: List user conversations
+      description: Returns paginated conversation threads belonging to the authenticated user.
+      operationId: listConversations
+      tags:
+        - Conversations
+      security:
+        - AccessTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: isArchived
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        200:
+          description: Conversations retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          conversations:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id:
+                                  type: string
+                                title:
+                                  type: string
+                                lastMessageAt:
+                                  type: string
+                                  format: date-time
+                                isArchived:
+                                  type: boolean
+                                messageCount:
+                                  type: integer
+                                createdAt:
+                                  type: string
+                                  format: date-time
+                          total:
+                            type: integer
+                          page:
+                            type: integer
+                          limit:
+                            type: integer
+                          totalPages:
+                            type: integer
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /conversations/{id}:
+    get:
+      summary: Get conversation thread & messages
+      description: Retrieves conversation details and chronological message history. Enforces thread ownership.
+      operationId: getConversationById
+      tags:
+        - Conversations
+      security:
+        - AccessTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+        - name: id
+          in: path
+          required: true
+          description: 24-character hexadecimal MongoDB ObjectId of conversation
+          schema:
+            type: string
+      responses:
+        200:
+          description: Conversation and messages retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          conversation:
+                            type: object
+                            properties:
+                              id:
+                                type: string
+                              title:
+                                type: string
+                              createdAt:
+                                type: string
+                                format: date-time
+                              updatedAt:
+                                type: string
+                                format: date-time
+                          messages:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id:
+                                  type: string
+                                sender:
+                                  type: string
+                                  enum: [user, assistant, system]
+                                content:
+                                  type: string
+                                sources:
+                                  type: array
+                                  items:
+                                    type: object
+                                createdAt:
+                                  type: string
+                                  format: date-time
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Delete conversation
+      description: Deletes a conversation thread and cascade deletes all associated message records.
+      operationId: deleteConversation
+      tags:
+        - Conversations
+      security:
+        - AccessTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Conversation deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users:
+    get:
+      summary: List users with pagination and filters (Admin only)
+      description: Returns a paginated list of registered users. Supports text search on name/email, and filtering by department, role, or active status.
+      operationId: getAdminUsers
+      tags:
+        - Admin
+      security:
+        - AccessTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+        - name: page
+          in: query
+          description: Page number (min 1)
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          description: Page size (1 to 100)
+          required: false
+          schema:
+            type: integer
+            default: 10
+        - name: search
+          in: query
+          description: Case-insensitive search on user name or email
+          required: false
+          schema:
+            type: string
+        - name: role
+          in: query
+          description: Filter users by role
+          required: false
+          schema:
+            type: string
+            enum: [admin, employee]
+        - name: department
+          in: query
+          description: Filter users by department
+          required: false
+          schema:
+            type: string
+        - name: isActive
+          in: query
+          description: Filter by account active status
+          required: false
+          schema:
+            type: boolean
+      responses:
+        200:
+          description: Users retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AdminUsersListData'
+        400:
+          $ref: '#/components/responses/BadRequestError'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/analytics:
+    get:
+      summary: Get system & RAG evaluation analytics (Admin only)
+      description: Computes and returns aggregated user statistics, document ingestion metrics, RAG question answering performance (latency, similarity, retrieval success), feedback sentiment rates, and top asked questions & used documents.
+      operationId: getAdminAnalytics
+      tags:
+        - Admin
+      security:
+        - AccessTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+      responses:
+        200:
+          description: Admin analytics retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AdminAnalyticsData'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/documents/{id}:
+    delete:
+      summary: Permanently delete knowledge document (Admin only)
+      description: Deletes document record, associated vector chunks, and object storage file from MinIO/S3, and creates an audit log entry.
+      operationId: deleteAdminDocument
+      tags:
+        - Admin
+      security:
+        - AccessTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/headerLanguage'
+        - $ref: '#/components/parameters/headerPlatform'
+        - $ref: '#/components/parameters/headerAppVersion'
+        - name: id
+          in: path
+          required: true
+          description: 24-character hexadecimal MongoDB ObjectId of document
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      responses:
+        200:
+          description: Document deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        400:
+          $ref: '#/components/responses/BadRequestError'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    headerLanguage:
+      name: x-language
+      in: header
+      description: Preferred response language code (supports x-language or Accept-Language)
+      required: false
+      schema:
+        type: string
+        default: en
+        enum:
+          - en
+          - es
+          - fr
+          - de
+          - hi
+    headerPlatform:
+      name: x-platform
+      in: header
+      description: Client application platform identifier
+      required: false
+      schema:
+        type: string
+        default: web
+        enum:
+          - web
+          - ios
+          - android
+          - desktop
+    headerAppVersion:
+      name: x-app-version
+      in: header
+      description: Semantic version of client app
+      required: false
+      schema:
+        type: string
+        default: 1.0.0
+        pattern: '^[\d]+\.[\d]+\.[\d]+$'
+
+  securitySchemes:
+    AccessTokenAuth:
+      type: apiKey
+      in: header
+      name: x-access-token
+      description: Provide JWT access token directly in x-access-token header
+    RefreshTokenAuth:
+      type: apiKey
+      in: header
+      name: x-refresh-token
+      description: Provide JWT refresh token directly in x-refresh-token header
+
+  schemas:
+    ApiResponse:
+      type: object
+      required:
+        - statusCode
+        - status
+        - message
+      properties:
+        statusCode:
+          type: integer
+          example: 200
+        status:
+          type: string
+          example: SUCCESS
+        message:
+          type: string
+          example: Operation completed successfully.
+        data:
+          type: object
+          nullable: true
+
+    RegisterRequest:
+      type: object
+      required:
+        - name
+        - email
+        - password
+        - department
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: "Neetesh Trivedi"
+        email:
+          type: string
+          format: email
+          example: "neetesh@company.com"
+        password:
+          type: string
+          format: password
+          minLength: 6
+          maxLength: 128
+          example: "Password123!"
+        department:
+          type: string
+          enum:
+            - Engineering
+            - HR
+            - Finance
+            - Legal
+            - Operations
+            - CustomerSupport
+          example: "Engineering"
+        role:
+          type: string
+          enum:
+            - admin
+            - employee
+          default: "employee"
+          example: "admin"
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "neetesh@company.com"
+        password:
+          type: string
+          format: password
+          example: "Password123!"
+        deviceToken:
+          type: string
+          nullable: true
+          example: ""
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "67041a7d8892f3b39c001234"
+        name:
+          type: string
+          example: "Neetesh Trivedi"
+        email:
+          type: string
+          format: email
+          example: "neetesh@company.com"
+        role:
+          type: string
+          example: "admin"
+        department:
+          type: string
+          example: "Engineering"
+        isActive:
+          type: boolean
+          example: true
+        lastLoginAt:
+          type: string
+          format: date-time
+          example: "2026-10-07T10:45:00.000Z"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-07T10:00:00.000Z"
+
+    AuthTokens:
+      type: object
+      required:
+        - accessToken
+        - refreshToken
+      properties:
+        accessToken:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refreshToken:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+    AuthData:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        tokens:
+          $ref: '#/components/schemas/AuthTokens'
+
+    TokenRefreshData:
+      type: object
+      required:
+        - tokens
+      properties:
+        tokens:
+          $ref: '#/components/schemas/AuthTokens'
+
+    DocumentItem:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "67041a7d8892f3b39c005678"
+        name:
+          type: string
+          example: "IT Troubleshooting Guide"
+        type:
+          type: string
+          example: "pdf"
+        department:
+          type: string
+          example: "IT"
+        accessLevel:
+          type: string
+          example: "department_only"
+        status:
+          type: string
+          example: "pending"
+        fileHash:
+          type: string
+          example: "a1b2c3d4e5f6..."
+        fileSize:
+          type: integer
+          example: 1048576
+        filePath:
+          type: string
+          example: "documents/IT/1791359971-uuid.pdf"
+        fileUrl:
+          type: string
+          example: "http://127.0.0.1:9000/support-copilot-documents/documents/IT/1791359971-uuid.pdf"
+        chunkCount:
+          type: integer
+          example: 0
+        uploadedBy:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+            role:
+              type: string
+            department:
+              type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DocumentUploadData:
+      type: object
+      properties:
+        document:
+          $ref: '#/components/schemas/DocumentItem'
+        fileUrl:
+          type: string
+          example: "http://127.0.0.1:9000/support-copilot-documents/documents/IT/1791359971-uuid.pdf"
+
+    DocumentListData:
+      type: object
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentItem'
+        total:
+          type: integer
+          example: 25
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        totalPages:
+          type: integer
+          example: 3
+
+    DocumentDetailData:
+      type: object
+      properties:
+        document:
+          $ref: '#/components/schemas/DocumentItem'
+
+    AdminUserItem:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "67041a7d8892f3b39c001234"
+        name:
+          type: string
+          example: "Neetesh Trivedi"
+        email:
+          type: string
+          format: email
+          example: "neetesh@company.com"
+        role:
+          type: string
+          example: "admin"
+        department:
+          type: string
+          example: "Engineering"
+        isActive:
+          type: boolean
+          example: true
+        lastLoginAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-10-14T08:00:00.000Z"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-10T12:00:00.000Z"
+
+    AdminUsersListData:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUserItem'
+        total:
+          type: integer
+          example: 45
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        totalPages:
+          type: integer
+          example: 5
+
+    AdminAnalyticsData:
+      type: object
+      properties:
+        users:
+          type: object
+          properties:
+            total:
+              type: integer
+              example: 245
+            active:
+              type: integer
+              example: 230
+            inactive:
+              type: integer
+              example: 15
+            byRole:
+              type: object
+              example: { "admin": 5, "employee": 240 }
+            byDepartment:
+              type: object
+              example: { "Engineering": 120, "HR": 35, "Finance": 40 }
+        documents:
+          type: object
+          properties:
+            total:
+              type: integer
+              example: 86
+            byStatus:
+              type: object
+              example: { "pending": 2, "processing": 1, "processed": 80, "failed": 3 }
+            byType:
+              type: object
+              example: { "pdf": 60, "docx": 20, "txt": 6 }
+            byDepartment:
+              type: object
+              example: { "HR": 30, "IT": 25, "Engineering": 31 }
+            totalChunks:
+              type: integer
+              example: 1250
+        queries:
+          type: object
+          properties:
+            totalQuestions:
+              type: integer
+              example: 1320
+            questionsToday:
+              type: integer
+              example: 132
+            successfulQueries:
+              type: integer
+              example: 1190
+            failedQueries:
+              type: integer
+              example: 30
+            noAnswerQueries:
+              type: integer
+              example: 100
+            averageResponseTimeMs:
+              type: integer
+              example: 2800
+            averageResponseTimeSec:
+              type: number
+              example: 2.8
+            averageSimilarityScore:
+              type: number
+              example: 0.842
+            retrievalSuccessRate:
+              type: number
+              example: 90.15
+            noAnswerRate:
+              type: number
+              example: 7.58
+        feedback:
+          type: object
+          properties:
+            total:
+              type: integer
+              example: 420
+            positive:
+              type: integer
+              example: 390
+            negative:
+              type: integer
+              example: 30
+            positiveFeedbackRate:
+              type: number
+              example: 92.86
+        mostAskedQuestions:
+          type: array
+          items:
+            type: object
+            properties:
+              query:
+                type: string
+                example: "What is the laptop replacement policy?"
+              count:
+                type: integer
+                example: 42
+              lastAskedAt:
+                type: string
+                format: date-time
+        mostUsedDocuments:
+          type: array
+          items:
+            type: object
+            properties:
+              documentId:
+                type: string
+                example: "67041a7d8892f3b39c005678"
+              documentName:
+                type: string
+                example: "IT_Hardware_Policy.pdf"
+              count:
+                type: integer
+                example: 56
+              department:
+                type: string
+                example: "IT"
+
+  responses:
+    BadRequestError:
+      description: Request validation failed or business condition warning (WARN/BAD_REQUEST)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+          example:
+            statusCode: 400
+            status: WARN
+            message: "Validation failed"
+            data: null
+
+    UnauthorizedError:
+      description: Authentication failed or token expired
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+          example:
+            statusCode: 401
+            status: UNAUTHORIZED
+            message: "Unauthorized access."
+            data: null
+
+    ForbiddenError:
+      description: Access denied due to insufficient permissions or department access control
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+          example:
+            statusCode: 403
+            status: FORBIDDEN
+            message: "You do not have permission to perform this action."
+            data: null
+
+    NotFoundError:
+      description: Requested resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+          example:
+            statusCode: 404
+            status: NOT_FOUND
+            message: "Requested resource was not found."
+            data: null
+
+    InternalServerError:
+      description: Unhandled internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+          example:
+            statusCode: 500
+            status: ERROR
+            message: "An unexpected error occurred."
+            data: null
