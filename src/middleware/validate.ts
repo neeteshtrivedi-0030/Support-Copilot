@@ -2,14 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import Joi, { ValidationOptions } from 'joi';
 import { env } from '../config/env';
 
-export type ValidationField = 'body' | 'params' | 'query' | 'headers';
-
-export interface ValidationSchemaMap {
-  body?: Joi.ObjectSchema;
-  params?: Joi.ObjectSchema;
-  query?: Joi.ObjectSchema;
-  headers?: Joi.ObjectSchema;
-}
+import { ValidationField, ValidationSchemaMap } from '../types';
 
 const assignValidatedValue = (req: Request, field: ValidationField, value: unknown): void => {
   try {

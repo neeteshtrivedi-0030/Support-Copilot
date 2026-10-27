@@ -2,16 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { authService } from '../auth/authService';
-import { IUserDocument } from '../types';
-
-declare global {
-  namespace Express {
-    interface Request {
-      user?: IUserDocument;
-      userId?: string;
-    }
-  }
-}
+import '../types';
 
 export const authenticate = async (
   req: Request,

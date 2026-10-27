@@ -32,6 +32,17 @@ export interface IChatResponseData {
   responseTimeMs: number;
 }
 
+export interface IChatStreamEvent {
+  type: 'content' | 'sources' | 'done' | 'error';
+  answer?: string;
+  sources?: IChatSource[];
+  conversationId?: string;
+  messageId?: string;
+  tokens?: ITokenUsage;
+  responseTimeMs?: number;
+  message?: string;
+}
+
 export interface ISearchRequest {
   query: string;
   department?: Department;

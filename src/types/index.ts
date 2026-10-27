@@ -14,3 +14,8 @@ export * from './admin.interface';
 export * from './chat.interface';
 export * from './llm.interface';
 export * from './rag.interface';
+export * from './vectorStore.interface';
+export * from './express.interface';
+export * from './validation.interface';
+export * from './i18n.interface';
+export * from './seed.interface';

@@ -4,3 +4,4 @@ export * from './requestLogger';
 export * from './responseHandler';
 export * from './validate';
 export * from './authenticate';
+export * from './rateLimiter';

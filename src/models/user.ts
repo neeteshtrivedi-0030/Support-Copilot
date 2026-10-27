@@ -1,5 +1,5 @@
 import { Schema, model, Model } from 'mongoose';
-import { IUserDocument } from '../types/user.interface';
+import { IUserDocument } from '../types';
 import { UserRole, Department } from '../enum';
 
 const userSchema = new Schema<IUserDocument>(

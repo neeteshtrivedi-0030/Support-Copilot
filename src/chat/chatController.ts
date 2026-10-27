@@ -14,18 +14,9 @@ export class ChatController extends BaseController {
         res.setHeader('Connection', 'keep-alive');
 
         try {
-          const result = await chatService.processChat(user, req.body);
-          res.write(`data: ${JSON.stringify({ type: 'content', answer: result.answer })}\n\n`);
-          res.write(`data: ${JSON.stringify({ type: 'sources', sources: result.sources })}\n\n`);
-          res.write(
-            `data: ${JSON.stringify({
-              type: 'done',
-              conversationId: result.conversationId,
-              messageId: result.messageId,
-              tokens: result.tokens,
-              responseTimeMs: result.responseTimeMs,
-            })}\n\n`
-          );
+          await chatService.processChatStream(user, req.body, (event) => {
+            res.write(`data: ${JSON.stringify(event)}\n\n`);
+          });
           res.end();
           return;
         } catch (streamErr) {

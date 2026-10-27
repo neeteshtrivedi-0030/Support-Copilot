@@ -4,7 +4,7 @@ import { MessageSender } from '../enum';
 export interface IGenerateAnswerInput {
   query: string;
   contextChunks: IChatSource[];
-  conversationHistory?: Array<{ sender: MessageSender; content: string }>;
+  conversationHistory?: Array<{ sender: MessageSender; content: string; sources?: IChatSource[] }>;
 }
 
 export interface IGenerateAnswerResult {
@@ -14,5 +14,5 @@ export interface IGenerateAnswerResult {
 
 export interface IRewriteQueryInput {
   query: string;
-  conversationHistory: Array<{ sender: MessageSender; content: string }>;
+  conversationHistory: Array<{ sender: MessageSender; content: string; sources?: IChatSource[] }>;
 }

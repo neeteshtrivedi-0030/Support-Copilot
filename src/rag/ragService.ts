@@ -1,11 +1,28 @@
 import { DocumentChunk, KnowledgeDocument } from '../models';
-import { Department, DocumentAccessLevel, UserRole } from '../enum';
+import { Department, DocumentAccessLevel, UserRole, VectorDbType } from '../enum';
 import { IChatSource, ISearchResultItem, IRagSearchOptions } from '../types';
+import { env } from '../config/env';
+import { vectorStoreService } from './vectorStoreService';
 
 export class RagService {
   public async retrieveChunks(options: IRagSearchOptions): Promise<IChatSource[]> {
     const { user, query, departmentFilter, limit = 4, minScore = 0.25 } = options;
 
+    // 1. Primary Vector Search: Qdrant Vector Database
+    if (env.VECTOR_DB_TYPE === VectorDbType.QDRANT) {
+      try {
+        const vectorSources = await vectorStoreService.searchSimilar(options);
+        if (vectorSources.length > 0) {
+          return vectorSources;
+        }
+      } catch (vectorErr) {
+        console.warn(
+          `[RagService] Qdrant retrieval warning: ${(vectorErr as Error).message}. Falling back to lexical retrieval.`
+        );
+      }
+    }
+
+    // 2. Secondary / Fallback Retrieval: MongoDB Keyword Scorer
     const baseFilter: Record<string, unknown> = {};
 
     if (user.role !== UserRole.ADMIN) {

@@ -1,5 +1,5 @@
 import { Schema, model, Model } from 'mongoose';
-import { IFeedbackModel } from '../types/feedback.interface';
+import { IFeedbackModel } from '../types';
 import { FeedbackRating } from '../enum';
 
 const feedbackSchema = new Schema<IFeedbackModel>(

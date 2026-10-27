@@ -1,5 +1,5 @@
 import { Schema, model, Model } from 'mongoose';
-import { IDocumentModel } from '../types/document.interface';
+import { IDocumentModel } from '../types';
 import {
   Department,
   DocumentFileType,

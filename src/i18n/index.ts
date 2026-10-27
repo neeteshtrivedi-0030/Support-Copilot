@@ -1,23 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import en from './locales/en';
 import { Platform } from '../enum';
-
-export type LocaleDictionary = Record<string, string>;
+import { LocaleDictionary } from '../types';
 
 export const languages: Record<string, LocaleDictionary> = {
   en,
 };
-
-declare global {
-  namespace Express {
-    interface Request {
-      platform: string;
-      appVersion: string;
-      language: string;
-      __(key: string, ...params: (string | number | boolean)[]): string;
-    }
-  }
-}
 
 export const getLanguageFromRequest = (req?: Request | void): string => {
   if (!req || !('headers' in req)) {

@@ -1,5 +1,5 @@
 import { Schema, model, Model } from 'mongoose';
-import { IAuditLogModel } from '../types/auditLog.interface';
+import { IAuditLogModel } from '../types';
 import { AuditAction, AuditResourceType } from '../enum';
 
 const auditLogSchema = new Schema<IAuditLogModel>(

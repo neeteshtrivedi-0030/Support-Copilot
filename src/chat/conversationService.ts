@@ -1,8 +1,8 @@
 import { Types } from 'mongoose';
 import { Conversation, Message } from '../models';
-import { IConversationModel } from '../types/conversation.interface';
-import { IMessageModel } from '../types/message.interface';
 import {
+  IConversationModel,
+  IMessageModel,
   IConversationListQuery,
   IConversationListResult,
   IConversationListItem,
@@ -10,7 +10,7 @@ import {
   IMessageItem,
   IChatSource,
   ITokenUsage,
-} from '../types/chat.interface';
+} from '../types';
 import { MessageSender } from '../enum';
 
 export class ConversationService {
@@ -187,16 +187,25 @@ export class ConversationService {
   public async getRecentMessages(
     conversationId: string,
     limit = 6
-  ): Promise<Array<{ sender: MessageSender; content: string }>> {
+  ): Promise<Array<{ sender: MessageSender; content: string; sources?: IChatSource[] }>> {
     const recent = await Message.find({ conversationId })
       .sort({ createdAt: -1 })
       .limit(limit)
-      .select('sender content')
+      .select('sender content sources')
       .exec();
 
     return recent.reverse().map((m) => ({
       sender: m.sender,
       content: m.content,
+      sources: (m.sources || []).map((s) => ({
+        documentId: s.documentId ? s.documentId.toString() : '',
+        chunkId: s.chunkId ? s.chunkId.toString() : '',
+        documentName: s.documentName,
+        pageNumber: s.pageNumber,
+        section: s.section,
+        snippet: s.snippet,
+        similarityScore: s.similarityScore ?? 1,
+      })),
     }));
   }
 

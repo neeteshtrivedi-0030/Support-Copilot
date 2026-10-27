@@ -8,21 +8,9 @@ import {
   DocumentProcessingStatus,
   UserRole,
 } from '../enum';
+import { IDocumentSeed } from '../types';
 
-interface DocumentSeed {
-  name: string;
-  type: DocumentFileType;
-  department: Department;
-  accessLevel: DocumentAccessLevel;
-  filePath: string;
-  chunks: Array<{
-    section: string;
-    pageNumber: number;
-    content: string;
-  }>;
-}
-
-const enterpriseDocuments: DocumentSeed[] = [
+const enterpriseDocuments: IDocumentSeed[] = [
   {
     name: 'Company Work-From-Home and Hybrid Policy 2026',
     type: DocumentFileType.PDF,

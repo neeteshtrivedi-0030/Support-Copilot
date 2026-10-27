@@ -1,5 +1,5 @@
 import { Schema, model, Model } from 'mongoose';
-import { IMessageModel } from '../types/message.interface';
+import { IMessageModel } from '../types';
 import { MessageSender } from '../enum';
 
 const citationSchema = new Schema(

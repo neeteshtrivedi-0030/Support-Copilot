@@ -28,6 +28,11 @@ export interface IEnvConfig {
   GROQ_MODEL?: string;
   VECTOR_DB_TYPE: VectorDbType;
 
+  QDRANT_URL?: string;
+  QDRANT_COLLECTION?: string;
+  OLLAMA_BASE_URL?: string;
+  OLLAMA_EMBED_MODEL?: string;
+
   S3_ENDPOINT: string;
   S3_REGION: string;
   S3_BUCKET: string;

@@ -1,5 +1,5 @@
 import { Schema, model, Model } from 'mongoose';
-import { IQueryLogModel } from '../types/queryLog.interface';
+import { IQueryLogModel } from '../types';
 import { QueryLogStatus } from '../enum';
 
 const queryLogSchema = new Schema<IQueryLogModel>(

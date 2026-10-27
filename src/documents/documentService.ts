@@ -1,8 +1,10 @@
 import crypto from 'crypto';
 import path from 'path';
 import { Types } from 'mongoose';
+import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { KnowledgeDocument, DocumentChunk } from '../models';
 import { storageService } from './storageService';
+import { vectorStoreService } from '../rag/vectorStoreService';
 import {
   Department,
   DocumentAccessLevel,
@@ -93,40 +95,76 @@ export class DocumentService {
         rawText = `Document: ${documentName}. Department: ${input.department}. File: ${input.file.originalname}. Contains organizational technical documentation, procedures, and specifications for ${documentName}.`;
       }
 
-      const paragraphs = rawText
-        .split(/\n{2,}|\r\n{2,}|\n(?=[0-9]+\.\s+[A-Z])/)
-        .map((p) => p.trim())
-        .filter((p) => p.length > 20);
-
-      const chunkDocs = (paragraphs.length > 0 ? paragraphs : [rawText])
-        .slice(0, 30)
-        .map((content, idx) => {
-          const firstLine = content
-            .split('\n')[0]
-            .replace(/^[0-9.]+\s*/, '')
-            .trim();
-          const sectionName =
-            firstLine.length > 3 && firstLine.length < 65 && !firstLine.includes('|')
-              ? firstLine
-              : `Section ${idx + 1}`;
-          return {
-            documentId: document._id,
-            chunkIndex: idx,
-            content: content.slice(0, 1500),
-            pageNumber: idx + 1,
-            section: sectionName,
-            tokenCount: Math.ceil(content.length / 4),
-            department: input.department,
-            accessLevel,
-            documentName,
-          };
+      let chunksText: string[] = [];
+      try {
+        const splitter = new RecursiveCharacterTextSplitter({
+          chunkSize: 1000,
+          chunkOverlap: 150,
         });
+        const docs = await splitter.createDocuments([rawText]);
+        chunksText = docs.map((d) => d.pageContent.trim()).filter((t) => t.length > 20);
+      } catch (splitErr) {
+        console.warn('[DocumentService] LangChain text splitter warning:', splitErr);
+        chunksText = rawText
+          .split(/\n{2,}|\r\n{2,}|\n(?=[0-9]+\.\s+[A-Z])/)
+          .map((p) => p.trim())
+          .filter((p) => p.length > 20);
+      }
+
+      if (chunksText.length === 0) {
+        chunksText = [rawText];
+      }
+
+      const chunkDocs = chunksText.slice(0, 50).map((content, idx) => {
+        const firstLine = content
+          .split('\n')[0]
+          .replace(/^[0-9.]+\s*/, '')
+          .trim();
+        const sectionName =
+          firstLine.length > 3 && firstLine.length < 65 && !firstLine.includes('|')
+            ? firstLine
+            : `Section ${idx + 1}`;
+        return {
+          documentId: document._id,
+          chunkIndex: idx,
+          content: content.slice(0, 1500),
+          pageNumber: idx + 1,
+          section: sectionName,
+          tokenCount: Math.ceil(content.length / 4),
+          department: input.department,
+          accessLevel,
+          documentName,
+        };
+      });
 
       if (chunkDocs.length > 0) {
-        await DocumentChunk.insertMany(chunkDocs);
+        const createdChunks = await DocumentChunk.insertMany(chunkDocs);
         document.chunkCount = chunkDocs.length;
         document.status = DocumentProcessingStatus.PROCESSED;
         await document.save();
+
+        // Index chunks into Qdrant vector database
+        try {
+          await vectorStoreService.upsertChunks(
+            createdChunks.map((chunk) => ({
+              id: crypto.randomUUID(),
+              content: chunk.content,
+              payload: {
+                documentId: document._id.toString(),
+                chunkId: chunk._id.toString(),
+                chunkIndex: chunk.chunkIndex,
+                content: chunk.content,
+                pageNumber: chunk.pageNumber,
+                section: chunk.section,
+                department: chunk.department,
+                accessLevel: chunk.accessLevel,
+                documentName: chunk.documentName,
+              },
+            }))
+          );
+        } catch (vectorErr) {
+          console.warn('[DocumentService] Qdrant chunk indexing warning:', vectorErr);
+        }
       }
     } catch (ingestErr) {
       console.warn('[DocumentService] Auto-chunking warning:', ingestErr);
@@ -253,6 +291,12 @@ export class DocumentService {
       await storageService.deleteFile(document.filePath);
     } catch (s3Error) {
       console.warn(`[DocumentService] S3 deletion warning for key ${document.filePath}:`, s3Error);
+    }
+
+    try {
+      await vectorStoreService.deleteDocumentChunks(document._id.toString());
+    } catch (vectorErr) {
+      console.warn(`[DocumentService] Qdrant deletion warning:`, vectorErr);
     }
 
     await DocumentChunk.deleteMany({ documentId: document._id }).exec();

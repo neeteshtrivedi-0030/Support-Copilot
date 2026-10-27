@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import Joi from 'joi';
-import { IEnvConfig } from '../types/env.interface';
+import { IEnvConfig } from '../types';
 import { NodeEnvironment, ServerMode, VectorDbType } from '../enum';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -50,6 +50,10 @@ const envSchema = Joi.object({
   VECTOR_DB_TYPE: Joi.string()
     .valid(...Object.values(VectorDbType))
     .default(VectorDbType.MEMORY),
+  QDRANT_URL: Joi.string().default('http://127.0.0.1:6333'),
+  QDRANT_COLLECTION: Joi.string().default('support_copilot_chunks'),
+  OLLAMA_BASE_URL: Joi.string().default('http://127.0.0.1:11434'),
+  OLLAMA_EMBED_MODEL: Joi.string().default('nomic-embed-text'),
 
   S3_ENDPOINT: Joi.string().default('http://127.0.0.1:9000'),
   S3_REGION: Joi.string().default('us-east-1'),

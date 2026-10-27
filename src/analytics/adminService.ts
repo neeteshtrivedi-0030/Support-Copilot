@@ -14,7 +14,7 @@ import {
   IAdminAnalytics,
   IMostAskedQuestion,
   IMostUsedDocument,
-} from '../types/admin.interface';
+} from '../types';
 import {
   UserRole,
   DocumentProcessingStatus,

@@ -1,5 +1,5 @@
 import { Schema, model, Model } from 'mongoose';
-import { IDocumentChunkModel } from '../types/chunk.interface';
+import { IDocumentChunkModel } from '../types';
 import { Department, DocumentAccessLevel } from '../enum';
 
 const documentChunkSchema = new Schema<IDocumentChunkModel>(

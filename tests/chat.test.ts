@@ -158,6 +158,18 @@ describe('Chat & Search Endpoints (POST /chat, POST /search)', () => {
       };
 
       jest.spyOn(chatService, 'processChat').mockResolvedValue(mockChatResponse);
+      jest
+        .spyOn(chatService, 'processChatStream')
+        .mockImplementation(async (_user, _req, onEvent) => {
+          onEvent({ type: 'sources', sources: [] });
+          onEvent({ type: 'content', answer: mockChatResponse.answer });
+          onEvent({
+            type: 'done',
+            conversationId: mockChatResponse.conversationId,
+            messageId: mockChatResponse.messageId,
+            responseTimeMs: mockChatResponse.responseTimeMs,
+          });
+        });
 
       const res = await request(app)
         .post('/api/v1/chat')
